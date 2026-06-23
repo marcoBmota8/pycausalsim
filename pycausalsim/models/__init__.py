@@ -153,12 +153,34 @@ class StructuralCausalModel:
         X = data[parents].values
         y = data[var].values
         
-        # Try non-linear model first, fall back to linear
+        # Select best GBM config via 3-fold CV, fall back to linear on failure
+        gbm_configs = [
+            {'n_estimators': 25, 'max_depth': 2},
+            {'n_estimators': 25, 'max_depth': 5},
+            {'n_estimators': 50, 'max_depth': 3},
+            {'n_estimators': 50, 'max_depth': 4},
+        ]
         try:
+            from sklearn.model_selection import cross_val_score
+
+            best_score = -np.inf
+            best_params = gbm_configs[0]
+            for params in gbm_configs:
+                candidate = GradientBoostingRegressor(
+                    **params,
+                    random_state=42,
+                )
+                scores = cross_val_score(
+                    candidate, X, y, cv=3, scoring='neg_mean_squared_error'
+                )
+                mean_score = scores.mean()
+                if mean_score > best_score:
+                    best_score = mean_score
+                    best_params = params
+
             model = GradientBoostingRegressor(
-                n_estimators=50,
-                max_depth=3,
-                random_state=42
+                **best_params,
+                random_state=42,
             )
             model.fit(X, y)
             residuals = y - model.predict(X)
