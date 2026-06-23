@@ -140,11 +140,13 @@ class StructuralCausalModel:
             values = data[var].values
             mechanism = {
                 'type': 'root',
+                'values': values, # If root, mechanism values are the noise values
                 'mean': np.mean(values),
                 'std': np.std(values)
             }
             noise = {
                 'type': self.noise_type,
+                'mean': np.mean(values),
                 'std': np.std(values)
             }
             return mechanism, noise
@@ -175,6 +177,7 @@ class StructuralCausalModel:
         
         noise = {
             'type': self.noise_type,
+            'values': residuals,
             'mean': np.mean(residuals),
             'std': np.std(residuals)
         }
@@ -258,12 +261,16 @@ class StructuralCausalModel:
                             mechanism['std'],
                             n_samples
                         )
-                    else:
+                    elif self.noise_type == 'uniform':
                         samples[var] = np.random.uniform(
                             mechanism['mean'] - mechanism['std'] * 1.7,
                             mechanism['mean'] + mechanism['std'] * 1.7,
                             n_samples
                         )
+                    elif self.noise_type == 'empirical': # If empirical, sample from bootstrap of the noise values. This is the same approach as in DoWhy.
+                        samples[var] = np.random.choice(mechanism['values'], n_samples, replace=True)
+                    else:
+                        raise ValueError(f"Unknown noise type: {self.noise_type}")
                 else:
                     # Non-root: apply mechanism + noise
                     parents = mechanism['parents']
@@ -273,12 +280,16 @@ class StructuralCausalModel:
                     
                     if self.noise_type == 'gaussian':
                         noise = np.random.normal(0, noise_params['std'], n_samples)
-                    else:
+                    elif self.noise_type == 'uniform':
                         noise = np.random.uniform(
                             -noise_params['std'] * 1.7,
                             noise_params['std'] * 1.7,
                             n_samples
                         )
+                    elif self.noise_type == 'empirical': # If empirical, sample from bootstrap of the noise values. This is the same approach as in DoWhy.
+                        noise = np.random.choice(noise_params['values'], n_samples, replace=True) 
+                    else:
+                        raise ValueError(f"Unknown noise type: {self.noise_type}")
                     
                     samples[var] = predictions + noise
         
