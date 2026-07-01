@@ -154,36 +154,53 @@ class StructuralCausalModel:
         y = data[var].values
         
         # Select best GBM config via 3-fold CV, fall back to linear on failure
-        gbm_configs = [
-            {'n_estimators': 25, 'max_depth': 2},
-            {'n_estimators': 25, 'max_depth': 5},
-            {'n_estimators': 50, 'max_depth': 3},
-            {'n_estimators': 50, 'max_depth': 4},
-        ]
+        configs = {
+            'GBM': [
+                    {'n_estimators': 25, 'max_depth': 2},
+                    {'n_estimators': 25, 'max_depth': 5},
+                    {'n_estimators': 50, 'max_depth': 3},
+                    {'n_estimators': 50, 'max_depth': 4},
+                    ],
+
+            # 'MLP': [
+            #         {'hidden_layer_sizes': (10,), 'learning_rate_init': 0.001, 'max_iter': 200},
+            #         {'hidden_layer_sizes': (10, 10),'learning_rate_init': 0.001, 'max_iter': 200},
+            #         ],
+            }
+
         try:
             from sklearn.model_selection import cross_val_score
 
             best_score = -np.inf
-            best_params = gbm_configs[0]
-            for params in gbm_configs:
-                candidate = GradientBoostingRegressor(
-                    **params,
+            best_architecture = None
+            best_params = []
+            for architecture, configs in configs.items():
+                for params in configs:
+                    candidates = {
+                        'GBM': GradientBoostingRegressor(
+                            **params,
+                            random_state=42
+                            )
+                        } #TODO: Add more candidates, MLP to model pure interaction more efficiently
+                    
+                    model_obj=candidates[architecture]
+                    scores = cross_val_score(
+                        model_obj, X, y, cv=3, scoring='neg_mean_squared_error'
+                    )
+                    
+                    mean_score = scores.mean()
+
+                    if mean_score > best_score:
+                        best_architecture = architecture
+                        best_score = mean_score
+                        best_params = params
+
+                model = candidates[best_architecture](
+                    **best_params,
                     random_state=42,
                 )
-                scores = cross_val_score(
-                    candidate, X, y, cv=3, scoring='neg_mean_squared_error'
-                )
-                mean_score = scores.mean()
-                if mean_score > best_score:
-                    best_score = mean_score
-                    best_params = params
-
-            model = GradientBoostingRegressor(
-                **best_params,
-                random_state=42,
-            )
-            model.fit(X, y)
-            residuals = y - model.predict(X)
+                model.fit(X, y)
+                residuals = y - model.predict(X)
         except Exception:
             model = Ridge(alpha=1.0)
             model.fit(X, y)
